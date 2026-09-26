@@ -117,8 +117,13 @@ jobs:
         shell: pwsh
         working-directory: upstream-source
         env:
-          GITHUB_WORKSPACE: ${{ github.workspace }}/upstream-source
-        run: lib/scripts/patch.ps1 android
+          PILIPLUS_WORKSPACE: ${{ github.workspace }}/upstream-source
+        run: |
+          $script = Get-Content -LiteralPath lib/scripts/patch.ps1 -Raw
+          $script = $script.Replace('$env:GITHUB_WORKSPACE', '$env:PILIPLUS_WORKSPACE')
+          $patchedScript = Join-Path $env:RUNNER_TEMP 'piliplus-patch.ps1'
+          Set-Content -LiteralPath $patchedScript -Value $script -NoNewline
+          & $patchedScript android
 
       - name: Write signing key
         if: steps.release.outputs.skip != 'true'
