@@ -31,6 +31,8 @@ jobs:
     steps:
       - name: Checkout customization files
         uses: actions/checkout@v7
+        with:
+          path: customization
 
       - name: Resolve upstream stable release
         id: release
@@ -67,8 +69,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git -C upstream-source apply --check "$GITHUB_WORKSPACE/patches/piliplus-self-use.patch"
-          git -C upstream-source apply "$GITHUB_WORKSPACE/patches/piliplus-self-use.patch"
+          git -C upstream-source apply --check "$GITHUB_WORKSPACE/customization/patches/piliplus-self-use.patch"
+          git -C upstream-source apply "$GITHUB_WORKSPACE/customization/patches/piliplus-self-use.patch"
           git -C upstream-source config user.name "github-actions[bot]"
           git -C upstream-source config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C upstream-source add --all
@@ -195,7 +197,7 @@ jobs:
           files: |
             PiliPlus_android_*.apk
             SHA256SUMS.txt
-            patches/piliplus-self-use.patch
+            customization/patches/piliplus-self-use.patch
 
       - name: Upload build artifacts
         if: steps.release.outputs.skip != 'true'
@@ -205,4 +207,4 @@ jobs:
           path: |
             PiliPlus_android_*.apk
             SHA256SUMS.txt
-            patches/piliplus-self-use.patch
+            customization/patches/piliplus-self-use.patch
