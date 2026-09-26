@@ -1,0 +1,165 @@
+diff --git a/lib/common/constants.dart b/lib/common/constants.dart
+index 25f5dc680..e0032fc85 100644
+--- a/lib/common/constants.dart
++++ b/lib/common/constants.dart
+@@ -1,6 +1,6 @@
+ abstract final class Constants {
+   static const appName = 'PiliPlus';
+-  static const sourceCodeUrl = 'https://github.com/bggRGjQaUbCoE/PiliPlus';
++  static const sourceCodeUrl = 'https://github.com/mcxiaochenn/PiliPlus';
+ 
+   // 27eb53fc9058f8c3  移动端 Android
+   // 4409e2ce8ffd12b8  HD版
+diff --git a/lib/http/api.dart b/lib/http/api.dart
+index 398bcbefb..10cb54ca7 100644
+--- a/lib/http/api.dart
++++ b/lib/http/api.dart
+@@ -410,7 +410,7 @@ abstract final class Api {
+ 
+   // github 获取最新版
+   static const String latestApp =
+-      'https://api.github.com/repos/bggRGjQaUbCoE/PiliPlus/releases';
++      'https://api.github.com/repos/mcxiaochenn/PiliPlus/releases';
+ 
+   // 多少人在看
+   // https://api.bilibili.com/x/player/online/total?aid=913663681&cid=1203559746&bvid=BV1MM4y1s7NZ&ts=56427838
+diff --git a/lib/pages/setting/models/video_settings.dart b/lib/pages/setting/models/video_settings.dart
+index 8d8b4bbec..dff448750 100644
+--- a/lib/pages/setting/models/video_settings.dart
++++ b/lib/pages/setting/models/video_settings.dart
+@@ -71,7 +71,7 @@ List<SettingsModel> get videoSettings => [
+   const SwitchModel(
+     title: 'CDN 测速',
+     leading: Icon(Icons.speed),
+-    subtitle: '测速通过模拟加载视频实现，注意流量消耗，结果仅供参考',
++    subtitle: '开启后可在 CDN 设置中手动发起测速，注意流量消耗，结果仅供参考',
+     setKey: SettingBoxKey.cdnSpeedTest,
+     defaultVal: true,
+   ),
+diff --git a/lib/pages/setting/widgets/select_dialog.dart b/lib/pages/setting/widgets/select_dialog.dart
+index cde1e1c1e..ec3d6d8ef 100644
+--- a/lib/pages/setting/widgets/select_dialog.dart
++++ b/lib/pages/setting/widgets/select_dialog.dart
+@@ -18,6 +18,7 @@ class SelectDialog<T> extends StatelessWidget {
+   final String title;
+   final List<(T, String)> values;
+   final Widget Function(BuildContext, int)? subtitleBuilder;
++  final List<Widget>? actions;
+   final bool toggleable;
+ 
+   const SelectDialog({
+@@ -26,6 +27,7 @@ class SelectDialog<T> extends StatelessWidget {
+     required this.values,
+     required this.title,
+     this.subtitleBuilder,
++    this.actions,
+     this.toggleable = false,
+   });
+ 
+@@ -67,6 +69,7 @@ class SelectDialog<T> extends StatelessWidget {
+           ),
+         ),
+       ),
++      actions: actions,
+     );
+   }
+ }
+@@ -85,8 +88,10 @@ class CdnSelectDialog extends StatefulWidget {
+ 
+ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+   late final List<ValueNotifier<String?>> _cdnResList;
++  late final List<double?> _cdnSpeedList;
+   late final List<CancelToken?> _tokens;
+   late final bool _cdnSpeedTest;
++  bool _isTesting = false;
+ 
+   @override
+   void initState() {
+@@ -108,8 +113,8 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+         length,
+         (_) => ValueNotifier<String?>(null),
+       );
++      _cdnSpeedList = List.filled(length, null);
+       _tokens = List.generate(length, (_) => CancelToken());
+-      _startSpeedTest();
+     }
+     super.initState();
+   }
+@@ -141,12 +146,41 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+     return item;
+   }
+ 
+-  Future<void> _startSpeedTest() async {
++  Future<void> _startSpeedTest({required bool autoSelect}) async {
++    if (_isTesting) return;
++    setState(() => _isTesting = true);
++
++    for (int i = 0; i < _cdnResList.length; i++) {
++      _tokens[i]?.cancel();
++      _tokens[i] = CancelToken();
++      _cdnResList[i].value = null;
++      _cdnSpeedList[i] = null;
++    }
++
++    CDNService? fastestCdn;
+     try {
+       final videoItem = widget.sample ?? await _getSampleUrl();
+       await _testAllCdnServices(videoItem);
++      if (autoSelect) {
++        double? fastestSpeed;
++        for (final item in CDNService.values) {
++          final speed = _cdnSpeedList[item.index];
++          if (speed != null && (fastestSpeed == null || speed > fastestSpeed)) {
++            fastestCdn = item;
++            fastestSpeed = speed;
++          }
++        }
++      }
+     } catch (e) {
+       if (kDebugMode) debugPrint('CDN speed test failed: $e');
++    } finally {
++      if (mounted) {
++        setState(() => _isTesting = false);
++      }
++    }
++
++    if (fastestCdn != null && mounted) {
++      Navigator.of(context).pop(fastestCdn);
+     }
+   }
+ 
+@@ -213,8 +247,9 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+   }
+ 
+   void _updateSpeedResult(int index, int downloaded, int duration) {
+-    final speed = (downloaded / duration).toStringAsPrecision(3);
+-    _cdnResList[index].value = '${speed}MB/s';
++    final speed = downloaded / duration;
++    _cdnSpeedList[index] = speed;
++    _cdnResList[index].value = '${speed.toStringAsPrecision(3)}MB/s';
+   }
+ 
+   void _handleSpeedTestError(dynamic error, int index) {
+@@ -265,6 +300,22 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+               );
+             }
+           : null,
++      actions: _cdnSpeedTest
++          ? [
++              TextButton(
++                onPressed: _isTesting
++                    ? null
++                    : () => _startSpeedTest(autoSelect: false),
++                child: const Text('全部测速'),
++              ),
++              TextButton(
++                onPressed: _isTesting
++                    ? null
++                    : () => _startSpeedTest(autoSelect: true),
++                child: Text(_isTesting ? '测速中...' : '一键自动测速并选择'),
++              ),
++            ]
++          : null,
+     );
+   }
+ }

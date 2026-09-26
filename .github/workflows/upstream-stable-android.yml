@@ -1,0 +1,208 @@
+name: Build upstream stable Android
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Upstream stable tag (leave empty to use latest)"
+        required: false
+        default: ""
+        type: string
+      publish_release:
+        description: "Push the patched tag and publish the GitHub Release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-stable-android
+  cancel-in-progress: false
+
+jobs:
+  android:
+    name: Build Android from upstream stable release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout customization files
+        uses: actions/checkout@v7
+
+      - name: Resolve upstream stable release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          set -euo pipefail
+          tag="$REQUESTED_TAG"
+          if [[ -z "$tag" ]]; then
+            tag="$(gh api repos/bggRGjQaUbCoE/PiliPlus/releases/latest --jq .tag_name)"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release $tag already exists; nothing to do."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout upstream tag
+        if: steps.release.outputs.skip != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: bggRGjQaUbCoE/PiliPlus
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+          path: upstream-source
+
+      - name: Apply self-use patch
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C upstream-source apply --check "$GITHUB_WORKSPACE/patches/piliplus-self-use.patch"
+          git -C upstream-source apply "$GITHUB_WORKSPACE/patches/piliplus-self-use.patch"
+          git -C upstream-source config user.name "github-actions[bot]"
+          git -C upstream-source config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C upstream-source add --all
+          git -C upstream-source commit -m "chore: apply self-use patch for ${{ steps.release.outputs.tag }}"
+
+      - name: Check signing secrets
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        env:
+          SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in SIGN_KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!value}" ]]; then
+              echo "Missing required signing secret: $value" >&2
+              exit 1
+            fi
+          done
+
+      - name: Set up Java
+        if: steps.release.outputs.skip != 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            upstream-source/android/*.gradle*
+            upstream-source/android/**/gradle-wrapper.properties
+
+      - name: Set up Flutter
+        if: steps.release.outputs.skip != 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: upstream-source/pubspec.yaml
+          cache: true
+
+      - name: Apply project build patches
+        if: steps.release.outputs.skip != 'true'
+        shell: pwsh
+        working-directory: upstream-source
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}/upstream-source
+        run: lib/scripts/patch.ps1 android
+
+      - name: Write signing key
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        working-directory: upstream-source
+        env:
+          SIGN_KEYSTORE_BASE64: ${{ secrets.SIGN_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$SIGN_KEYSTORE_BASE64" | base64 --decode > android/app/key.jks
+          {
+            printf 'storeFile=key.jks\n'
+            printf 'storePassword=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+          } > android/key.properties
+
+      - name: Analyze
+        if: steps.release.outputs.skip != 'true'
+        working-directory: upstream-source
+        run: flutter analyze --no-pub
+
+      - name: Test
+        if: steps.release.outputs.skip != 'true'
+        working-directory: upstream-source
+        run: flutter test --no-pub
+
+      - name: Set build version
+        if: steps.release.outputs.skip != 'true'
+        shell: pwsh
+        working-directory: upstream-source
+        run: lib/scripts/build.ps1 android
+
+      - name: Build release APKs
+        if: steps.release.outputs.skip != 'true'
+        working-directory: upstream-source
+        run: flutter build apk --release --split-per-abi --dart-define-from-file=pili_release.json --no-pub
+
+      - name: Collect release files
+        if: steps.release.outputs.skip != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in upstream-source/build/app/outputs/flutter-apk/app-*-release.apk; do
+            abi="$(basename "$file" | sed -E 's/app-(.*)-release\.apk/\1/')"
+            cp "$file" "PiliPlus_android_${{ env.version }}_${abi}.apk"
+          done
+          sha256sum PiliPlus_android_*.apk > SHA256SUMS.txt
+
+      - name: Push patched source tag
+        if: steps.release.outputs.skip != 'true' && (github.event_name == 'schedule' || inputs.publish_release == true)
+        shell: bash
+        working-directory: upstream-source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git remote add fork "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git tag --force "$TAG"
+          git push fork "refs/tags/$TAG" --force
+
+      - name: Publish release
+        if: steps.release.outputs.skip != 'true' && (github.event_name == 'schedule' || inputs.publish_release == true)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.tag }}
+          body: |
+            非官方自用构建，基于上游 PiliPlus ${{ steps.release.outputs.tag }} 稳定版并应用本仓库补丁。
+
+            Upstream: https://github.com/bggRGjQaUbCoE/PiliPlus/releases/tag/${{ steps.release.outputs.tag }}
+          files: |
+            PiliPlus_android_*.apk
+            SHA256SUMS.txt
+            patches/piliplus-self-use.patch
+
+      - name: Upload build artifacts
+        if: steps.release.outputs.skip != 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: PiliPlus-Android-${{ steps.release.outputs.tag }}
+          path: |
+            PiliPlus_android_*.apk
+            SHA256SUMS.txt
+            patches/piliplus-self-use.patch
