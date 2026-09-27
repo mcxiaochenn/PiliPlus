@@ -25,6 +25,25 @@
 
 <br/>
 
+## 本 Fork 说明
+
+本仓库是 [PiliPlus](https://github.com/bggRGjQaUbCoE/PiliPlus) 的非官方自用 Fork，优先维护 Android 构建，并在尽量不改变上游原有逻辑的前提下提供以下调整：
+
+- CDN 设置支持“全部测速”和“一键自动测速并选择”。打开 CDN 设置不会自动产生测速流量；一键测速完成后会选择成功线路中速度最快的节点，全部失败时保持原线路不变。
+- 应用内更新检测、源码及 Release 链接指向本仓库。
+- 通过自用补丁跟随上游稳定版本构建，避免长期维护一份与上游分叉的完整源码。
+
+### 自动同步与发布
+
+[GitHub Actions 工作流](.github/workflows/upstream-stable-android.yml) 每 6 小时检查一次上游最新稳定 Release，也支持手动触发。发现本仓库尚未发布的上游版本后，会自动：
+
+1. 检出对应的上游标签，并检查、应用 [`patches/piliplus-self-use.patch`](patches/piliplus-self-use.patch)。
+2. 运行静态分析和测试；任一步失败都会停止，不创建 Release。
+3. 使用固定的自用签名构建 `arm64-v8a`、`armeabi-v7a` 和 `x86_64` 三种 Android APK。
+4. 生成 SHA-256 校验文件，并以与上游相同的版本号发布到本仓库 [Releases](https://github.com/mcxiaochenn/PiliPlus/releases)。
+
+如果补丁与新版上游源码冲突、签名 Secrets 缺失、测试失败或构建失败，工作流会保留失败记录并停止发布，需要人工处理。本 Fork 不自动构建桌面端及 Apple 平台。
+
 ## 适配平台
 
 - [x] Android
