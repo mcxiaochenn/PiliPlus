@@ -1,5 +1,5 @@
 diff --git a/lib/common/constants.dart b/lib/common/constants.dart
-index 25f5dc680..e0032fc85 100644
+index e48d543..5db0bcd 100644
 --- a/lib/common/constants.dart
 +++ b/lib/common/constants.dart
 @@ -1,6 +1,6 @@
@@ -11,10 +11,10 @@ index 25f5dc680..e0032fc85 100644
    // 27eb53fc9058f8c3  移动端 Android
    // 4409e2ce8ffd12b8  HD版
 diff --git a/lib/http/api.dart b/lib/http/api.dart
-index 398bcbefb..10cb54ca7 100644
+index 33fa148..8046499 100644
 --- a/lib/http/api.dart
 +++ b/lib/http/api.dart
-@@ -410,7 +410,7 @@ abstract final class Api {
+@@ -412,7 +412,7 @@ abstract final class Api {
  
    // github 获取最新版
    static const String latestApp =
@@ -24,10 +24,10 @@ index 398bcbefb..10cb54ca7 100644
    // 多少人在看
    // https://api.bilibili.com/x/player/online/total?aid=913663681&cid=1203559746&bvid=BV1MM4y1s7NZ&ts=56427838
 diff --git a/lib/pages/setting/models/video_settings.dart b/lib/pages/setting/models/video_settings.dart
-index 8d8b4bbec..dff448750 100644
+index dd679e8..aad56c3 100644
 --- a/lib/pages/setting/models/video_settings.dart
 +++ b/lib/pages/setting/models/video_settings.dart
-@@ -71,7 +71,7 @@ List<SettingsModel> get videoSettings => [
+@@ -69,7 +69,7 @@ List<SettingsModel> get videoSettings => [
    const SwitchModel(
      title: 'CDN 测速',
      leading: Icon(Icons.speed),
@@ -37,18 +37,18 @@ index 8d8b4bbec..dff448750 100644
      defaultVal: true,
    ),
 diff --git a/lib/pages/setting/widgets/select_dialog.dart b/lib/pages/setting/widgets/select_dialog.dart
-index cde1e1c1e..ec3d6d8ef 100644
+index b33f61e..42513c0 100644
 --- a/lib/pages/setting/widgets/select_dialog.dart
 +++ b/lib/pages/setting/widgets/select_dialog.dart
-@@ -18,6 +18,7 @@ class SelectDialog<T> extends StatelessWidget {
-   final String title;
+@@ -19,6 +19,7 @@ class SelectDialog<T> extends StatelessWidget {
    final List<(T, String)> values;
-   final Widget Function(BuildContext, int)? subtitleBuilder;
+   final Widget? Function(BuildContext context, int index, T value)?
+   subtitleBuilder;
 +  final List<Widget>? actions;
    final bool toggleable;
  
    const SelectDialog({
-@@ -26,6 +27,7 @@ class SelectDialog<T> extends StatelessWidget {
+@@ -27,6 +28,7 @@ class SelectDialog<T> extends StatelessWidget {
      required this.values,
      required this.title,
      this.subtitleBuilder,
@@ -56,7 +56,7 @@ index cde1e1c1e..ec3d6d8ef 100644
      this.toggleable = false,
    });
  
-@@ -67,6 +69,7 @@ class SelectDialog<T> extends StatelessWidget {
+@@ -65,6 +67,7 @@ class SelectDialog<T> extends StatelessWidget {
            ),
          ),
        ),
@@ -64,7 +64,7 @@ index cde1e1c1e..ec3d6d8ef 100644
      );
    }
  }
-@@ -85,8 +88,10 @@ class CdnSelectDialog extends StatefulWidget {
+@@ -83,8 +86,10 @@ class CdnSelectDialog extends StatefulWidget {
  
  class _CdnSelectDialogState extends State<CdnSelectDialog> {
    late final List<ValueNotifier<String?>> _cdnResList;
@@ -75,7 +75,7 @@ index cde1e1c1e..ec3d6d8ef 100644
  
    @override
    void initState() {
-@@ -108,8 +113,8 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+@@ -106,8 +111,8 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
          length,
          (_) => ValueNotifier<String?>(null),
        );
@@ -85,7 +85,7 @@ index cde1e1c1e..ec3d6d8ef 100644
      }
      super.initState();
    }
-@@ -141,12 +146,41 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+@@ -139,12 +144,41 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
      return item;
    }
  
@@ -128,7 +128,7 @@ index cde1e1c1e..ec3d6d8ef 100644
      }
    }
  
-@@ -213,8 +247,9 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+@@ -211,8 +245,9 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
    }
  
    void _updateSpeedResult(int index, int downloaded, int duration) {
@@ -140,7 +140,7 @@ index cde1e1c1e..ec3d6d8ef 100644
    }
  
    void _handleSpeedTestError(dynamic error, int index) {
-@@ -265,6 +300,22 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
+@@ -263,6 +298,22 @@ class _CdnSelectDialogState extends State<CdnSelectDialog> {
                );
              }
            : null,
@@ -163,7 +163,6 @@ index cde1e1c1e..ec3d6d8ef 100644
      );
    }
  }
-
 diff --git a/test/utils/accounts/deleted_account_test.dart b/test/utils/accounts/deleted_account_test.dart
 index a05cad0..478446b 100644
 --- a/test/utils/accounts/deleted_account_test.dart
